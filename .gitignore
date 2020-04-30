@@ -1,0 +1,9 @@
+micro
+notes/*
+__pycache__
+.mypy_cache
+.venv
+config.json
+results.csv
+index.html
+*.png
