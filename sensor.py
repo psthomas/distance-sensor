@@ -1,21 +1,27 @@
-import os
 import pathlib
 import csv
 import json
 import pickle
 import statistics
+import logging
 from time import sleep
 from datetime import datetime, timedelta
 
-#from gpiozero.pins.native import NativeFactory
 from gpiozero import DistanceSensor
 from twilio.rest import Client
+
+# Set up global logger
+this_dir = pathlib.Path(__file__).parent.absolute()
+logging_path = this_dir.joinpath('sensor.log')
+logging.basicConfig(filename=logging_path,format='%(asctime)s %(levelname)s: %(message)s',
+    level=logging.INFO)
+logging.getLogger("twilio").setLevel(logging.WARNING)
+logging.getLogger("gpiozero").setLevel(logging.WARNING)
 
 # https://gpiozero.readthedocs.io/en/stable/api_input.html#distancesensor-hc-sr04
 def get_distance():
     measurements = []
     # Trying to set max_distance to 2m, default is 1m
-    #factory = NativeFactory() pin_factory=factory)
     sensor = DistanceSensor(echo=17, trigger=27)
     for i in range(5):
         dist = sensor.distance  # Initial value in m
@@ -37,7 +43,9 @@ def send_texts(config, message):
             from_=config['twilio_number'],
             to=number
         )
-        print('Warning sent to: {0}, sid {1}, message: {2}'.format(number, sent.sid, message))
+        log_message = 'Warning sent to: {0}, sid {1}, message: {2}'.format(
+        	number, sent.sid, message)
+        logging.info(log_message)
 
 def record_level(results_path, now, sensor_height, distance, level):
     # Append to CSV file
@@ -85,6 +93,7 @@ def register_paths():
             writer.writerow(header)
 
     return {
+        'base_dir': base_dir,
         'state_path': state_path,
         'results_path': results_path,
         'config_path': config_path
@@ -100,17 +109,9 @@ def get_config(config_path):
     return config
 
 def create_warning(config, level):
-
-    fill_str = '''Warning: your {0} level is {1}cm, which is above your allowed level of {2}cm.'''
-    drain_str = '''Warning: your {0} level is {1}cm, which is below your allowed level of {2}cm.'''
-    static_str = '''Warning: your {0} level is {1}cm, which is out of your allowed range of {2} to {3}cm.'''
-
-    # Note: Absolute values need to be used to handle situation where sensor 
-    # height/warning_level are negative relative to datum.
-    # E.g. when it's draining, level = -7 relative to datum, and warning_level = -6
-    # Actually it's not needed, this will work as is?
-    # And for this to work with the static numbers, the upper bound must always be the
-    # larger of the two numbers, even if they're negative (e.g. -5 > -10)
+    fill_str = '''Warning: Your {0} level is {1}cm, which is above your allowed level of {2}cm.'''
+    drain_str = '''Warning: Your {0} level is {1}cm, which is below your allowed level of {2}cm.'''
+    static_str = '''Warning: Your {0} level is {1}cm, which is out of your allowed range of {2} to {3}cm.'''
 
     name = config['name']
 
@@ -126,15 +127,8 @@ def create_warning(config, level):
         if (level > upper_bound) or (level < lower_bound):
             return static_str.format(name, round(level, 2), lower_bound, upper_bound)
 
-    # If no warning is warranted
-    return False
-
-def update_web():
-    # Use this function to create the matplotlib visualization,
-    # and pass it and the data into the template. Maybe put this
-    # in app.py along with the server, then import and use it below
-    # after the measurement has been taken?
-    pass
+    # If no warning is warranted:
+    return None
 
 def run_sample(config, paths):
     state = get_state(paths['state_path'])
@@ -146,72 +140,35 @@ def run_sample(config, paths):
     # the sensor_height and distance. Everything is relative to datum.
     level = config['sensor_height'] - distance
     record_level(paths['results_path'], now, config['sensor_height'], distance, level)
-    print('Actual level: ', level)
-
-    level = 50
-    print('Fake level: ', level)
+    logging.info('Reading recorded: {0}cm'.format(round(level, 2)))
 
     # Don't warn if you've already warned within frequency period
     # Note, if sending the SMS fails, the state will never be set. So as long as 
-    # the measurement continues to be higher, the warning will be sent next measurement.
-    if (now - state['last_warning']) >= timedelta(minutes=config['warning_frequency']):
-        warning = create_warning(config, level)
-        if warning:
-            print(warning)
+    # the measurement continues to be high, the warning will be sent next measurement.
+    timeout = (now - state['last_warning']) < timedelta(minutes=config['warning_frequency'])
+
+    level=50
+    
+    warning = create_warning(config, level)
+    if warning:
+        if not timeout:
             send_texts(config, warning)
             state['last_warning'] = now
             set_state(paths['state_path'], state)
-    else:
-        print('Too soon, {0}'.format(state['last_warning']))
-
+        else:
+            log_message = 'Warning warranted ({0}cm), but on timeout for {1}min.' \
+                .format(round(level, 2), config['warning_frequency'])
+            logging.info(log_message)
 
 def main():
     paths = register_paths()
     config = get_config(paths['config_path'])
-    
-    while True:
+    try:
         run_sample(config, paths)
-        sleep(config['test_frequency']*60) # Wait in seconds
+    except:
+        logging.exception("An exception was thrown:")
+        raise
 
 
 if __name__ == '__main__':
-    # TODO: if sys.argv[0] == "--test":
-    # load test_config.json and pass to main
-    # otherwise load config.json and pass it to main
-    # That way all the user has to do is change config.json
     main()
-
-
-# types: upper, lower, static
-# types: fill, drain, static
-# if static, confic must have +- error bound
-# so if static, needs "bound": {"upper": cm, "lower": cm}
-# Note that the "upper" will always be closest to sensor
-# maybe have datum? Or just have heights all measured relative to same point?
-
-# TODO: mention limitations of sensor, e.g. near and far distance
-# TODO: Tab delimit, or comma delimit and just format the webpage? Just comma delimit
-# TODO: except for config, wrap below in another function? 
-# TODO: To build matplotlib vis, take tail off CSV with largest number of points it can handle. 
-# This will prevent the plotting from slowing down once many points have been gathered.
-# TODO: Logging
-
-# DONE: install requirements, figure out venv, .env variables
-# TODO: Implement text messaging
-
-# so what requirements do I have?
-# matplotlib, twilio, gpiozero.
-# Server can be handled with python, templating too. 
-
-# "datum": 0, # Height all other measurements are relative
-# "sensor_height": 60.96, # Height above datum in centimeters
-# so warning_distance below should be 60.96-45.72 = 15.24 cm
-# Just say that all heights need to be measured relative to the same height
-# in the directions. Could be relative to sensor? Should all measurements just
-# be relative to the sensor?
-# just have warning distance?
-# Example bound dict: {'lower': 5, 'upper': 10}, note, upper has to be furthest from datum
-# so if the datum is above the level (e.g. top of tank), the upper bound is actually the more
-# negative of the two numbers. NO THIS IS NOT TRUE. THE UPPER BOUND SHOULD ALWAYS BE THE
-# LARGER OF THE TWO NUMBERS. SO IF IT'S NEGATIVE, IT SHOULD ALWAYS BE LESS NEGATIVE THAN
-# THE LOWER BOUND.
