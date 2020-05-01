@@ -112,14 +112,14 @@ def get_config(config_path):
 
 def create_warning(config, distance):
     near_str = '''Warning: Your {0} distance is {1}cm, which is closer than your allowed distance of {2}cm.'''
-    far_str = '''Warning: Your {0} distance is {1}cm, which is further than  your allowed distance of {2}cm.'''
+    far_str = '''Warning: Your {0} distance is {1}cm, which is further than your allowed distance of {2}cm.'''
     static_str = '''Warning: Your {0} distance is {1}cm, which is out of your allowed range of {2} to {3}cm.'''
 
     name = config['name']
 
     if (config['type'] == 'near') and (distance < config['warning_distance']):
         return near_str.format(name, round(distance, 2), config['warning_distance'])
-    elif (config['type'] == 'far') and (distance > config['warning_distannce']):
+    elif (config['type'] == 'far') and (distance > config['warning_distance']):
         return far_str.format(name, round(distance, 2), config['warning_distance'])
     # Note: for this to work, the upper bound must always be the larger
     # of the two numbers, and all numbers will always be positive.
@@ -141,9 +141,7 @@ def run_sample(config, paths):
     # to the sensor. It will be up to the user to interpret results.
     record_distance(paths['results_path'], now, distance)
     logging.info('Reading recorded: {0}cm'.format(round(distance, 2)))
-
-    distance=15
-
+    
     # Don't warn if you've already warned within frequency period
     # Note, if sending the SMS fails, the state will never be set. So as long as 
     # the measurement continues to be bad, the warning will be sent next measurement.
