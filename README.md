@@ -2,7 +2,7 @@
 
 This code is for a general purpose distance sensor, which can be used for monitoring things like water levels. For example, I use it to monitor my sump pump to make sure it doesn't overflow. It's configured to send  warning text messages to me via [Twilio](https://www.twilio.com/) when the water level gets too high:
 
-![phone screen](phone.png)
+<img align="center" src="phone.png"/>
 
 Below are a list of materials and setup instructions you can use this code to monitor anything you want.
 
@@ -19,7 +19,7 @@ All told, the above materials should cost around $40.
 
 The first step is to get the Raspberry Pi up and running and connect the distance sensor. I won't go in-depth into this as there are [better resources](https://learn.adafruit.com/ultrasonic-sonar-distance-sensors) out there but the crucial thing to know is that I assume that the echo of your sensor is attached to GPIO 17, and the trigger to GPIO 27. The power can be attached to any 3V pin, and the ground to any ground pin. 
 
-![headers](gpio.png)
+<img align="center" src="gpip.png"/>
 
 The next step is to put the sensor in position. Point the sensor at what you want to measure, keeping it perpendicular to the surface (these sensors use soundwaves to measure distances, so oblique angles won't work). The sensors will work at about 2cm to 450cm away, but 10cm-250cm will give you the best results.  
 
