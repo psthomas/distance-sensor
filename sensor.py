@@ -46,22 +46,20 @@ def send_texts(config, message):
             from_=config['twilio_number'],
             to=number
         )
-        log_message = 'Warning sent to: {0}, sid: {1}, message: {2}'.format(
-        	number, sent.sid, message)
+        log_message = 'Warning sent to: {0}, sid: {1}, message: {2}' \
+            .format(number, sent.sid, message)
         logging.info(log_message)
 
-def record_level(results_path, now, sensor_height, distance, level):
+def record_distance(results_path, now, distance):
     # Append to CSV file
     # Note that this file will always exist, as handled in register_paths()
     with results_path.open('a', newline='') as csvfile:
         #https://docs.python.org/2/library/csv.html#csv.DictWriter
-        fieldnames = ['time', 'sensor_height', 'distance', 'level']
+        fieldnames = ['time', 'distance']
         writer = csv.DictWriter(csvfile, fieldnames)
         writer.writerow({
             'time': now.isoformat(),
-            'sensor_height': sensor_height,
-            'distance': distance, 
-            'level': level
+            'distance': distance
         })
 
 def get_state(state_path):
@@ -92,7 +90,7 @@ def register_paths():
         # Write out CSV file with header
         with results_path.open('w', newline='') as csvfile:
             writer = csv.writer(csvfile)
-            header = ['time', 'sensor_height', 'distance', 'level']
+            header = ['time', 'distance']
             writer.writerow(header)
 
     return {
@@ -103,6 +101,7 @@ def register_paths():
     }
 
 def validate_config(config):
+    # In future, check common config errors
     pass
 
 def get_config(config_path):
@@ -111,24 +110,24 @@ def get_config(config_path):
     config = json.loads(data)
     return config
 
-def create_warning(config, level):
-    fill_str = '''Warning: Your {0} level is {1}cm, which is above your allowed level of {2}cm.'''
-    drain_str = '''Warning: Your {0} level is {1}cm, which is below your allowed level of {2}cm.'''
-    static_str = '''Warning: Your {0} level is {1}cm, which is out of your allowed range of {2} to {3}cm.'''
+def create_warning(config, distance):
+    near_str = '''Warning: Your {0} distance is {1}cm, which is closer than your allowed distance of {2}cm.'''
+    far_str = '''Warning: Your {0} distance is {1}cm, which is further than  your allowed distance of {2}cm.'''
+    static_str = '''Warning: Your {0} distance is {1}cm, which is out of your allowed range of {2} to {3}cm.'''
 
     name = config['name']
 
-    if (config['type'] == 'fill') and (level > config['warning_level']):
-        return fill_str.format(name, round(level, 2), config['warning_level'])
-    elif (config['type'] == 'drain') and (level < config['warning_level']):
-        return drain_str.format(name, round(level, 2), config['warning_level'])
+    if (config['type'] == 'near') and (distance < config['warning_distance']):
+        return near_str.format(name, round(distance, 2), config['warning_distance'])
+    elif (config['type'] == 'far') and (distance > config['warning_distannce']):
+        return far_str.format(name, round(distance, 2), config['warning_distance'])
     # Note: for this to work, the upper bound must always be the larger
-    # of the two numbers, even if they're negative (e.g. -5cm > -10cm)
+    # of the two numbers, and all numbers will always be positive.
     elif (config['type'] == 'static'):
-        upper_bound = config['warning_level']['upper']
-        lower_bound = config['warning_level']['lower']
-        if (level > upper_bound) or (level < lower_bound):
-            return static_str.format(name, round(level, 2), lower_bound, upper_bound)
+        upper_bound = config['warning_distance']['upper'] # Furthest from sensor
+        lower_bound = config['warning_distance']['lower'] # Nearest to sensor
+        if (distance > upper_bound) or (distance < lower_bound):
+            return static_str.format(name, round(distance, 2), lower_bound, upper_bound)
 
     # If no warning is warranted:
     return None
@@ -138,19 +137,19 @@ def run_sample(config, paths):
     now = datetime.now()
     distance = get_distance()
 
-    # Note, if datum is above sensor, sensor_height will be negative
-    # so the math works out. This will even work if datum is between
-    # the sensor_height and distance. Everything is relative to datum.
-    level = config['sensor_height'] - distance
-    record_level(paths['results_path'], now, config['sensor_height'], distance, level)
-    logging.info('Reading recorded: {0}cm'.format(round(level, 2)))
+    # Note: the distance will always be positive and measured relative
+    # to the sensor. It will be up to the user to interpret results.
+    record_distance(paths['results_path'], now, distance)
+    logging.info('Reading recorded: {0}cm'.format(round(distance, 2)))
+
+    distance=15
 
     # Don't warn if you've already warned within frequency period
     # Note, if sending the SMS fails, the state will never be set. So as long as 
-    # the measurement continues to be high, the warning will be sent next measurement.
+    # the measurement continues to be bad, the warning will be sent next measurement.
     timeout = (now - state['last_warning']) < timedelta(minutes=config['warning_frequency'])
     
-    warning = create_warning(config, level)
+    warning = create_warning(config, distance)
     if warning:
         if not timeout:
             send_texts(config, warning)
@@ -158,7 +157,7 @@ def run_sample(config, paths):
             set_state(paths['state_path'], state)
         else:
             log_message = 'Warning warranted ({0}cm), but on timeout for {1}min.' \
-                .format(round(level, 2), config['warning_frequency'])
+                .format(round(distance, 2), config['warning_frequency'])
             logging.info(log_message)
 
 def main():
@@ -169,7 +168,6 @@ def main():
     except:
         logging.exception("An exception was thrown:")
         raise
-
 
 if __name__ == '__main__':
     main()
