@@ -13,8 +13,11 @@ from twilio.rest import Client
 # Set up global logger
 this_dir = pathlib.Path(__file__).parent.absolute()
 logging_path = this_dir.joinpath('sensor.log')
-logging.basicConfig(filename=logging_path,format='%(asctime)s %(levelname)s: %(message)s',
-    level=logging.INFO)
+logging.basicConfig(
+    filename=logging_path,
+    format='%(asctime)s %(levelname)s: %(message)s',
+    level=logging.INFO
+)
 logging.getLogger("twilio").setLevel(logging.WARNING)
 logging.getLogger("gpiozero").setLevel(logging.WARNING)
 
@@ -43,7 +46,7 @@ def send_texts(config, message):
             from_=config['twilio_number'],
             to=number
         )
-        log_message = 'Warning sent to: {0}, sid {1}, message: {2}'.format(
+        log_message = 'Warning sent to: {0}, sid: {1}, message: {2}'.format(
         	number, sent.sid, message)
         logging.info(log_message)
 
@@ -146,8 +149,6 @@ def run_sample(config, paths):
     # Note, if sending the SMS fails, the state will never be set. So as long as 
     # the measurement continues to be high, the warning will be sent next measurement.
     timeout = (now - state['last_warning']) < timedelta(minutes=config['warning_frequency'])
-
-    level=50
     
     warning = create_warning(config, level)
     if warning:

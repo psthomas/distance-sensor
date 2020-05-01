@@ -3,7 +3,6 @@
   "sensor_height": 60.96,
   "warning_level": 45.72,
   "type": "fill",
-  "test_frequency": 1,
   "warning_frequency": 15,
   "twilio_number": "+15017122661",
   "phone_numbers": ["+15017122661","+15017122661"],

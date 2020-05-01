@@ -5,6 +5,8 @@ __pycache__
 .venv
 config.json
 results.csv
+sensor.log
+cron.log
 state.pkl
 index.html
 *.png
